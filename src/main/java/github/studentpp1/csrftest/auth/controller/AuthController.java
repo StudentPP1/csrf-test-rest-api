@@ -9,6 +9,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import javax.naming.AuthenticationException;
+
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
@@ -19,17 +21,25 @@ public class AuthController {
     }
 
     @GetMapping("/getSession")
+    @ResponseBody
     public UserResponse getSession() {
         return authService.getSession();
     }
 
+    @PostMapping("/logout")
+    public ResponseEntity<String> logout(HttpServletRequest request) {
+        authService.logout(request);
+        return ResponseEntity.status(200).body("Success logout");
+    }
+
     @PostMapping("/login")
-    public void login(
+    public ResponseEntity<String> login(
             @RequestBody LoginRequest loginRequest,
             HttpServletRequest request,
             HttpServletResponse response
     ) {
         authService.login(loginRequest, request, response);
+        return ResponseEntity.status(200).body("Success login");
     }
 
     @PostMapping("/register")
@@ -37,8 +47,8 @@ public class AuthController {
             @RequestBody RegisterRequest registerRequest,
             HttpServletRequest request,
             HttpServletResponse response
-    ) {
+    ) throws AuthenticationException {
         authService.register(registerRequest, request, response);
-        return ResponseEntity.status(200).body("Success");
+        return ResponseEntity.status(200).body("Success register");
     }
 }

@@ -1,6 +1,7 @@
 package github.studentpp1.csrftest.config;
 
 import github.studentpp1.csrftest.auth.service.UserDetailsServiceImpl;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -24,6 +25,7 @@ import java.util.List;
 @EnableWebSecurity
 public class WebConfig {
     private final UserDetailsServiceImpl userDetailsService;
+    private static final String FRONT_END_URL = "http://localhost:5173";
 
     public WebConfig(UserDetailsServiceImpl userDetailsService) {
         this.userDetailsService = userDetailsService;
@@ -32,9 +34,11 @@ public class WebConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                .cors(cors -> cors.configurationSource(this.corsConfigurationSource()))
+                .cors(cors -> cors
+                        .configurationSource(this.corsConfigurationSource())
+                )
                 .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()) // зберігає CSRF-токен у куках
                         .sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy())
                 )
                 .authorizeHttpRequests(request -> request
@@ -42,16 +46,27 @@ public class WebConfig {
                         .requestMatchers("/auth/**").permitAll()
                         .anyRequest().authenticated()
                 )
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.ALWAYS))
-                .logout(logoutConfig -> logoutConfig.deleteCookies("JSESSIONID"))
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.ALWAYS)
+                )
+//                .logout(logout -> logout
+//                        .logoutUrl("/auth/logout")  // URL для виходу
+//                        .invalidateHttpSession(true)  // Скидання сесії
+//                        .deleteCookies("JSESSIONID", "XSRF-TOKEN") // Видалення сесійних куків
+//                        .logoutSuccessHandler((request, response, authentication) -> {
+//                            response.setStatus(HttpServletResponse.SC_OK);
+//                            response.getWriter().write("User logged out");
+//                            response.getWriter().flush();
+//                        })
+//                )
                 .build();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
-        configuration.setAllowedMethods(List.of("POST", "GET", "OPTIONS", "DELETE", "PUT"));
+        configuration.setAllowedOrigins(List.of(FRONT_END_URL));
+        configuration.setAllowedMethods(List.of("POST", "GET", "OPTIONS", "DELETE"));
         configuration.setAllowCredentials(true);
         configuration.addAllowedHeader("*");
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -71,21 +86,4 @@ public class WebConfig {
         provider.setUserDetailsService(userDetailsService);
         return new ProviderManager(provider);
     }
-
-//    private static class SpaCsrfTokenRequestHandler extends CsrfTokenRequestAttributeHandler {
-//        private final CsrfTokenRequestHandler delegate = new XorCsrfTokenRequestAttributeHandler();
-//
-//        @Override
-//        public void handle(HttpServletRequest request, HttpServletResponse response, Supplier<CsrfToken> csrfToken) {
-//            this.delegate.handle(request, response, csrfToken);
-//        }
-//
-//        @Override
-//        public String resolveCsrfTokenValue(HttpServletRequest request, CsrfToken csrfToken) {
-//            if (StringUtils.hasText(request.getHeader(csrfToken.getHeaderName()))) {
-//                return super.resolveCsrfTokenValue(request, csrfToken);
-//            }
-//            return this.delegate.resolveCsrfTokenValue(request, csrfToken);
-//        }
-//    }
 }

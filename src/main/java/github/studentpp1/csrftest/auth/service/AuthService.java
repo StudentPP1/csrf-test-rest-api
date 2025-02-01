@@ -8,6 +8,7 @@ import github.studentpp1.csrftest.response.UserResponse;
 import github.studentpp1.csrftest.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -21,6 +22,8 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.stereotype.Service;
+
+import javax.naming.AuthenticationException;
 
 @Service
 public class AuthService {
@@ -36,8 +39,23 @@ public class AuthService {
         this.authenticationManager = authenticationManager;
     }
 
+    public void logout(HttpServletRequest request) {
+        CsrfToken token = (CsrfToken) request.getAttribute("_csrf");
+        logger.info("{}={}", token.getHeaderName(), token.getToken());
+
+        SecurityContextHolder.clearContext(); // Очищення контексту безпеки
+
+        HttpSession session = request.getSession(false); // Отримуємо сесію (якщо є)
+        if (session != null) {
+            session.invalidate(); // Завершуємо сесію
+        }
+
+        logger.info("User logged out successfully");
+    }
+
     public UserResponse getSession() {
         UserEntity user = SecurityUtils.getAuthenticatedUser();
+        logger.info("Get user: " + user);
         return UserResponse.builder()
                 .name(user.getName())
                 .username(user.getUsername())
@@ -48,6 +66,9 @@ public class AuthService {
                       HttpServletRequest request,
                       HttpServletResponse response
     ) {
+        CsrfToken token = (CsrfToken) request.getAttribute("_csrf");
+        logger.info("{}={}", token.getHeaderName(), token.getToken());
+
         // set session cookie in response
         try {
             createSession(
@@ -65,7 +86,7 @@ public class AuthService {
             RegisterRequest userRegisterRequest,
             HttpServletRequest request,
             HttpServletResponse response
-    ) {
+    ) throws AuthenticationException {
         CsrfToken token = (CsrfToken) request.getAttribute("_csrf");
         logger.info("{}={}", token.getHeaderName(), token.getToken());
 
@@ -77,6 +98,7 @@ public class AuthService {
 
         // save user to context
         authenticateUser(user);
+
         //  set session cookie in response
         createSession(
                 request,
@@ -86,15 +108,26 @@ public class AuthService {
         );
     }
 
-    private void authenticateUser(UserEntity user) {
-        logger.info("start authentication");
-        UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
-                user,
-                user.getPassword(),
-                user.getAuthorities()
-        );
-        SecurityContextHolder.getContext().setAuthentication(authenticationToken);
-        logger.info("end authentication");
+    private boolean isAuthenticated() {
+        return SecurityContextHolder.getContext().getAuthentication().getPrincipal() instanceof UserEntity;
+    }
+
+    private void authenticateUser(UserEntity user) throws AuthenticationException {
+        logger.info("Context: " + SecurityContextHolder.getContext());
+
+        if (!isAuthenticated()) {
+            logger.info("start authentication");
+            UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
+                    user,
+                    user.getPassword(),
+                    user.getAuthorities()
+            );
+            SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+            logger.info("end authentication");
+        }
+        else {
+            throw new AuthenticationException("user already registered");
+        }
     }
 
     private void createSession(
@@ -110,7 +143,7 @@ public class AuthService {
         );
         Authentication authentication = authenticationManager.authenticate(token);
         SecurityContextHolderStrategy holder = SecurityContextHolder.getContextHolderStrategy();
-        SecurityContext context = holder.createEmptyContext();
+        SecurityContext context = holder.getContext();
         logger.info("set authentication");
         context.setAuthentication(authentication);
         holder.setContext(context);
