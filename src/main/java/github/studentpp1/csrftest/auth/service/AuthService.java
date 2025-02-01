@@ -17,6 +17,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextHolderStrategy;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -33,7 +34,11 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository contextRepository = new HttpSessionSecurityContextRepository();
 
-    public AuthService(UserService userService, PasswordEncoder passwordEncoder, AuthenticationManager authenticationManager) {
+    public AuthService(
+            final UserService userService,
+            final PasswordEncoder passwordEncoder,
+            final AuthenticationManager authenticationManager
+    ) {
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
@@ -45,7 +50,7 @@ public class AuthService {
 
         SecurityContextHolder.clearContext(); // Очищення контексту безпеки
 
-        HttpSession session = request.getSession(false); // Отримуємо сесію (якщо є)
+        HttpSession session = request.getSession(); // Отримуємо сесію
         if (session != null) {
             session.invalidate(); // Завершуємо сесію
         }
@@ -70,16 +75,12 @@ public class AuthService {
         logger.info("{}={}", token.getHeaderName(), token.getToken());
 
         // set session cookie in response
-        try {
-            createSession(
-                    request,
-                    response,
-                    userLoginRequest.getUsername(),
-                    userLoginRequest.getPassword()
-            );
-        } catch (Exception exception) {
-            throw new RuntimeException("User not found");
-        }
+        authenticateUserAndSendSession(
+                request,
+                response,
+                userLoginRequest.getUsername(),
+                userLoginRequest.getPassword()
+        );
     }
 
     public void register(
@@ -90,47 +91,59 @@ public class AuthService {
         CsrfToken token = (CsrfToken) request.getAttribute("_csrf");
         logger.info("{}={}", token.getHeaderName(), token.getToken());
 
-        UserEntity user = new UserEntity();
-        user.setName(userRegisterRequest.getName());
-        user.setUsername(userRegisterRequest.getUsername());
-        user.setPassword(passwordEncoder.encode(userRegisterRequest.getPassword()));
-        user = userService.saveUser(user);
+        final String username = userRegisterRequest.getUsername();
+        final String password = userRegisterRequest.getPassword();
 
-        // save user to context
-        authenticateUser(user);
+        if (!this.isUserAuthenticated() && !this.isUserExists(username, password)) {
+            // create & save user
+            UserEntity user = new UserEntity();
+            user.setName(userRegisterRequest.getName());
+            user.setUsername(username);
+            user.setPassword(passwordEncoder.encode(password));
+            user = userService.saveUser(user);
 
-        //  set session cookie in response
-        createSession(
-                request,
-                response,
-                userRegisterRequest.getUsername(),
-                userRegisterRequest.getPassword()
-        );
-    }
+            // save user to application's context
+            saveUserToContext(user);
 
-    private boolean isAuthenticated() {
-        return SecurityContextHolder.getContext().getAuthentication().getPrincipal() instanceof UserEntity;
-    }
-
-    private void authenticateUser(UserEntity user) throws AuthenticationException {
-        logger.info("Context: " + SecurityContextHolder.getContext());
-
-        if (!isAuthenticated()) {
-            logger.info("start authentication");
-            UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
-                    user,
-                    user.getPassword(),
-                    user.getAuthorities()
+            //  set session cookie in response
+            authenticateUserAndSendSession(
+                    request,
+                    response,
+                    username,
+                    password
             );
-            SecurityContextHolder.getContext().setAuthentication(authenticationToken);
-            logger.info("end authentication");
-        }
-        else {
+        } else {
             throw new AuthenticationException("user already registered");
         }
     }
 
-    private void createSession(
+    private boolean isUserAuthenticated() {
+        return SecurityContextHolder.getContext().getAuthentication().getPrincipal() instanceof UserEntity;
+    }
+
+    private boolean isUserExists(final String username, final String password) {
+        try {
+            UserEntity user = userService.getUserEntity(username);
+            return passwordEncoder.matches(password, user.getPassword());
+        } catch (final UsernameNotFoundException exception) {
+            return false;
+        }
+    }
+
+    private void saveUserToContext(UserEntity user) {
+        // помещаем нового пользователя в контекст приложения напрямую
+        logger.info("Context: " + SecurityContextHolder.getContext());
+        logger.info("start authentication");
+        UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
+                user,
+                user.getPassword(),
+                user.getAuthorities()
+        );
+        SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+        logger.info("end authentication");
+    }
+
+    private void authenticateUserAndSendSession(
             HttpServletRequest request,
             HttpServletResponse response,
             String username,
@@ -141,13 +154,28 @@ public class AuthService {
                 username,
                 password
         );
+        /*
+        в .authenticate() методе достаем нашего пользователя
+        из хранилища (по username который передали в UsernamePasswordAuthenticationToken)
+        через провайдера (в нашем случае DaoAuthenticationProvider)
+        и проверяем хэшированный пароль с тем который передали в UsernamePasswordAuthenticationToken
+        */
         Authentication authentication = authenticationManager.authenticate(token);
+        /*
+        SecurityContextHolder -> wrapper над контекстом (со статическими методами получения контекста)
+        */
         SecurityContextHolderStrategy holder = SecurityContextHolder.getContextHolderStrategy();
+        // получаем контекст приложения
         SecurityContext context = holder.getContext();
         logger.info("set authentication");
         context.setAuthentication(authentication);
+        // помещаем наш объект Authentication (похож на UserDetails) в контекст приложения
         holder.setContext(context);
         logger.info("saving context");
+        /*
+        сохраняем контекст в репозитории (в нашем случае HttpSessionSecurityContextRepository ->
+        сохраняем в сессии, которая будет записана в объекте HttpServletResponse)
+        */
         contextRepository.saveContext(context, request, response);
         logger.info("end creating session");
     }

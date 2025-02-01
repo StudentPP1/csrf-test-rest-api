@@ -4,14 +4,11 @@ import github.studentpp1.csrftest.model.UserEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
-import org.springframework.security.web.context.SecurityContextRepository;
 
-public class SecurityUtils {
+public final class SecurityUtils {
     private static final Logger logger = LoggerFactory.getLogger(SecurityUtils.class);
-    private static final SecurityContextRepository securityRepository = new HttpSessionSecurityContextRepository();
-
     public static UserEntity getAuthenticatedUser() {
+        // достаем из контекста нашего пользователя и приводим к нужному типу
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         if (principal instanceof UserEntity user) {
             return user;

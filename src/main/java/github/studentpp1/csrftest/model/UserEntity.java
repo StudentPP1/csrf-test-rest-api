@@ -1,9 +1,7 @@
 package github.studentpp1.csrftest.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import github.studentpp1.csrftest.enums.UserRole;
+import jakarta.persistence.*;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -15,7 +13,13 @@ import java.util.List;
 @Table
 public class UserEntity implements UserDetails {
     @Id
-    @GeneratedValue
+
+    /*
+     * Для каждого insert запроса генерируется уникальный ключ
+     * надежна для многих клиентов, но медленнее за простую SEQUENCE,
+     * которая поддерживает использовать пакетное сохранение данных (отправить все одним списком)
+     */
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
     private String name;
     private String username;
@@ -23,7 +27,7 @@ public class UserEntity implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("USER"));
+        return List.of(new SimpleGrantedAuthority(UserRole.USER.name()));
     }
 
     @Override
@@ -34,10 +38,6 @@ public class UserEntity implements UserDetails {
     @Override
     public String getUsername() {
         return this.username;
-    }
-
-    public long getId() {
-        return id;
     }
 
     public String getName() {

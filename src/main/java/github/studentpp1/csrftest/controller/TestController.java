@@ -13,7 +13,9 @@ import java.util.Map;
 public class TestController {
 
     @PostMapping("/protected")
-    public ResponseEntity<String> protectedEndpoint(@RequestBody Map<String, String> body) {
-        return ResponseEntity.ok("Received: " + body.get("data"));
+    public ResponseEntity<Map<String, String>> protectedEndpoint(
+            @RequestBody Map<String, String> body
+    ) {
+        return ResponseEntity.ok(body);
     }
 }
