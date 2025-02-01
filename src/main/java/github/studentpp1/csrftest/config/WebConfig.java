@@ -35,7 +35,9 @@ public class WebConfig {
                 .cors(cors -> cors
                         .configurationSource(this.corsConfigurationSource())
                 )
-                .csrf(csrf -> csrf // сохраняет CSRF-токен в cookie
+                .csrf(csrf -> csrf
+                        // сохраняет CSRF-токен в cookie
+                        // Метод withHttpOnlyFalse дозволяє JavaScript читати XSRF cookie
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 )
                 .authorizeHttpRequests(request -> request
